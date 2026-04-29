@@ -1,0 +1,97 @@
+name: 'Pipery ArgoCD CD'
+description: 'CD pipeline for ArgoCD: update image tag → sync application → wait for Argo rollout'
+inputs:
+  project_path:
+    description: 'Path to the project source tree.'
+    required: false
+    default: '.'
+  config_file:
+    description: 'Path to the pipery config file.'
+    required: false
+    default: '.github/pipery/config.yaml'
+  argocd_server:
+    description: 'ArgoCD server URL (e.g. argocd.example.com).'
+    required: false
+    default: ''
+  argocd_app:
+    description: 'ArgoCD application name.'
+    required: false
+    default: ''
+  argocd_token:
+    description: 'ArgoCD authentication token.'
+    required: false
+    default: ''
+  image_name:
+    description: 'Container image name to update in ArgoCD.'
+    required: false
+    default: ''
+  image_tag:
+    description: 'Container image tag to deploy.'
+    required: false
+    default: '${{ github.sha }}'
+  sync_timeout:
+    description: 'Seconds to wait for ArgoCD sync.'
+    required: false
+    default: '300'
+  prune:
+    description: 'Prune resources during sync.'
+    required: false
+    default: 'false'
+  force:
+    description: 'Force sync even if app is in sync.'
+    required: false
+    default: 'false'
+  skip_update:
+    description: 'Skip image tag update step.'
+    required: false
+    default: 'false'
+  skip_sync:
+    description: 'Skip ArgoCD sync step.'
+    required: false
+    default: 'false'
+  skip_status_check:
+    description: 'Skip rollout status check.'
+    required: false
+    default: 'false'
+  log_file:
+    description: 'Path to write the JSONL log file.'
+    required: false
+    default: 'pipery.jsonl'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Set up psh
+    uses: pipery-dev/pipery@v1
+
+  - name: Load config
+    shell: bash
+    run: src/read-config.sh
+    env:
+      INPUT_PROJECT_PATH: ${{ inputs.project_path }}
+      INPUT_CONFIG_FILE: ${{ inputs.config_file }}
+
+  - name: Update
+    shell: bash
+    run: src/step-update.sh
+    env:
+      INPUT_PROJECT_PATH: ${ inputs.project_path }
+      INPUT_LOG_FILE: ${ inputs.log_file }
+
+  - name: Sync
+    shell: bash
+    run: src/step-sync.sh
+    env:
+      INPUT_PROJECT_PATH: ${ inputs.project_path }
+      INPUT_LOG_FILE: ${ inputs.log_file }
+
+  - name: Status
+    shell: bash
+    run: src/step-status.sh
+    env:
+      INPUT_PROJECT_PATH: ${ inputs.project_path }
+      INPUT_LOG_FILE: ${ inputs.log_file }
+
+branding:
+  icon: git-merge
+  color: orange
