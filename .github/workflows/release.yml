@@ -12,15 +12,10 @@ on:
           - minor
           - major
 
-permissions:
-  contents: write
-
 jobs:
   release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Call release workflow
-        uses: pipery-dev/pipery-tooling/.github/workflows/pipery-release.yml@main
-        with:
-          bump: ${{ inputs.bump }}
+    uses: pipery-dev/pipery-tooling/.github/workflows/pipery-release.yml@main
+    with:
+      bump: ${{ inputs.bump }}
+    permissions:
+      contents: write
