@@ -1,3 +1,13 @@
+# Release v2.0.0
+
+Repository: `pipery-dev/pipery-argocd-cd`
+
+## Deployment
+
+Reference this release as `pipery-dev/pipery-argocd-cd@v2.0.0`, `pipery-dev/pipery-argocd-cd@v2.0`, or `pipery-dev/pipery-argocd-cd@v2`.
+
+## Changelog
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
