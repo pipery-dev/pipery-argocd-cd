@@ -23,7 +23,7 @@ jobs:
       - uses: pipery-dev/pipery-argocd-cd@v3
         with:
           project_path: .
-          config_file: .github/pipery/config.yaml
+          config_file: .pipery/config.yaml
           argocd_server: 
           argocd_app: 
           argocd_token: 
@@ -38,12 +38,23 @@ jobs:
           log_file: pipery.jsonl
 ```
 
+## GitLab CI
+
+This repository also includes a GitLab CI equivalent at `.gitlab-ci.yml`. Copy it into a GitLab project or use it as the reference implementation when you want to run the same Pipery pipeline outside GitHub Actions.
+
+The GitLab pipeline maps the action inputs to CI/CD variables, publishes `pipery.jsonl` as an artifact, and keeps the same skip controls where the GitHub Action exposes them. Store credentials such as deploy tokens, registry passwords, and cloud provider keys as protected GitLab CI/CD variables.
+
+```yaml
+include:
+  - remote: https://raw.githubusercontent.com/pipery-dev/pipery-argocd-cd/v3/.gitlab-ci.yml
+```
+
 ## Inputs
 
 | Name | Required | Default | Description |
 | --- | --- | --- | --- |
 | `project_path` | no | `.` | Path to the project source tree. |
-| `config_file` | no | `.github/pipery/config.yaml` | Path to the pipery config file. |
+| `config_file` | no | `.pipery/config.yaml` | Path to the pipery config file. |
 | `argocd_server` | no | `` | ArgoCD server URL (e.g. argocd.example.com). |
 | `argocd_app` | no | `` | ArgoCD application name. |
 | `argocd_token` | no | `` | ArgoCD authentication token. |

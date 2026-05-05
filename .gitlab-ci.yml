@@ -13,7 +13,7 @@
 
 variables:
   PROJECT_PATH: "."
-  CONFIG_FILE: ".github/pipery/config.yaml"
+  CONFIG_FILE: ".pipery/config.yaml"
   # ArgoCD configuration
   ARGOCD_SERVER: ""
   ARGOCD_APP: ""

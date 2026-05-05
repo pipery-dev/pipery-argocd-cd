@@ -25,7 +25,7 @@ jobs:
       - uses: pipery-dev/pipery-argocd-cd@v3
         with:
           project_path: .
-          config_file: .github/pipery/config.yaml
+          config_file: .pipery/config.yaml
           argocd_server: 
           argocd_app: 
           argocd_token: 
