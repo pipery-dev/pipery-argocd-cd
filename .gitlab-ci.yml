@@ -84,7 +84,6 @@ download_images:
   env:
     INPUT_IMAGE_NAME: $IMAGE_NAME
     INPUT_IMAGE_TAG: $IMAGE_TAG
-    INPUT_REGISTRY: $REGISTRY
     INPUT_LOG_FILE: $LOG_FILE
   allow_failure: true
   rules:
