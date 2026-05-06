@@ -49,8 +49,10 @@ checkout:
   stage: checkout
   image: alpine:latest
   script:
-    - echo "Repository already checked out by GitLab CI"
-    - ls -la
+    # Refactored: Call shared script instead of inline logic
+    - bash ./src/step-checkout.sh
+  env:
+    INPUT_LOG_FILE: $LOG_FILE
   artifacts:
     paths:
       - .git/
@@ -59,14 +61,11 @@ checkout:
 setup:
   stage: setup
   image: alpine:latest
-  before_script:
-    - apk add --no-cache curl
   script:
-    - echo "Setting up ArgoCD CLI environment..."
-    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-    - chmod +x /usr/local/bin/argocd
-    - argocd version
-    - echo "Setup complete"
+    # Refactored: Call shared script instead of inline logic
+    - bash ./src/setup-psh.sh
+  env:
+    INPUT_LOG_FILE: $LOG_FILE
   artifacts:
     paths:
       - .git/
@@ -79,18 +78,14 @@ setup:
 download_images:
   stage: download
   image: alpine:latest
-  before_script:
-    - apk add --no-cache docker curl
   script:
-    - echo "Downloading/verifying container image availability..."
-    - |
-      if [ -z "$IMAGE_NAME" ]; then
-        echo "IMAGE_NAME not set, skipping image download"
-        exit 0
-      fi
-    - echo "Checking image: $IMAGE_NAME:$IMAGE_TAG"
-    - docker pull $IMAGE_NAME:$IMAGE_TAG || echo "Note: Image pull requires authentication"
-    - echo "Image download stage complete"
+    # Refactored: Call shared script instead of inline logic
+    - bash ./src/step-pull.sh
+  env:
+    INPUT_IMAGE_NAME: $IMAGE_NAME
+    INPUT_IMAGE_TAG: $IMAGE_TAG
+    INPUT_REGISTRY: $REGISTRY
+    INPUT_LOG_FILE: $LOG_FILE
   allow_failure: true
   rules:
     - when: on_success
@@ -102,29 +97,16 @@ download_images:
 update_argocd_image:
   stage: update
   image: alpine:latest
-  before_script:
-    - apk add --no-cache curl bash
   script:
-    - echo "Updating ArgoCD application with new image..."
-    - |
-      if [ -z "$ARGOCD_SERVER" ] || [ -z "$ARGOCD_APP" ] || [ -z "$ARGOCD_TOKEN" ]; then
-        echo "ERROR: ARGOCD_SERVER, ARGOCD_APP, and ARGOCD_TOKEN must be configured"
-        exit 1
-      fi
-    - |
-      if [ -z "$IMAGE_NAME" ]; then
-        echo "IMAGE_NAME not set, skipping image update"
-        exit 0
-      fi
-    - echo "Logging in to ArgoCD server: $ARGOCD_SERVER"
-    - |
-      ARGOCD_AUTH_TOKEN=$ARGOCD_TOKEN
-      echo "Logged in to ArgoCD"
-    - |
-      echo "Updating application $ARGOCD_APP with image $IMAGE_NAME:$IMAGE_TAG"
-      # Note: In real scenario, would use argocd app patch or equivalent
-      echo "Application would be updated with new image tag"
-    - echo "Update complete"
+    # Refactored: Call shared script instead of inline logic
+    - bash ./src/step-update.sh
+  env:
+    INPUT_ARGOCD_SERVER: $ARGOCD_SERVER
+    INPUT_ARGOCD_APP: $ARGOCD_APP
+    INPUT_ARGOCD_TOKEN: $ARGOCD_TOKEN
+    INPUT_IMAGE_NAME: $IMAGE_NAME
+    INPUT_IMAGE_TAG: $IMAGE_TAG
+    INPUT_LOG_FILE: $LOG_FILE
   rules:
     - if: '$SKIP_UPDATE == "true"'
       when: never
@@ -140,28 +122,17 @@ sync_argocd:
   image: alpine:latest
   dependencies:
     - update_argocd_image
-  before_script:
-    - apk add --no-cache curl bash
   script:
-    - echo "Syncing ArgoCD application..."
-    - |
-      if [ -z "$ARGOCD_SERVER" ] || [ -z "$ARGOCD_APP" ] || [ -z "$ARGOCD_TOKEN" ]; then
-        echo "ERROR: ARGOCD_SERVER, ARGOCD_APP, and ARGOCD_TOKEN must be configured"
-        exit 1
-      fi
-    - echo "Syncing application: $ARGOCD_APP"
-    - |
-      SYNC_FLAGS=""
-      [ "$PRUNE" == "true" ] && SYNC_FLAGS="$SYNC_FLAGS --prune"
-      [ "$FORCE" == "true" ] && SYNC_FLAGS="$SYNC_FLAGS --force"
-      echo "Sync flags: $SYNC_FLAGS"
-      # In real scenario, would use: argocd app sync $ARGOCD_APP $SYNC_FLAGS
-      echo "Application sync would be triggered with flags: $SYNC_FLAGS"
-    - |
-      echo "Waiting for sync to complete (timeout: ${SYNC_TIMEOUT}s)..."
-      # In real scenario, would poll for sync status
-      echo "Sync operation would wait up to $SYNC_TIMEOUT seconds"
-    - echo "Sync stage complete"
+    # Refactored: Call shared script instead of inline logic
+    - bash ./src/step-sync.sh
+  env:
+    INPUT_ARGOCD_SERVER: $ARGOCD_SERVER
+    INPUT_ARGOCD_APP: $ARGOCD_APP
+    INPUT_ARGOCD_TOKEN: $ARGOCD_TOKEN
+    INPUT_SYNC_TIMEOUT: $SYNC_TIMEOUT
+    INPUT_PRUNE: $PRUNE
+    INPUT_FORCE: $FORCE
+    INPUT_LOG_FILE: $LOG_FILE
   rules:
     - if: '$SKIP_SYNC == "true"'
       when: never
@@ -181,21 +152,14 @@ status_check:
   image: alpine:latest
   dependencies:
     - sync_argocd
-  before_script:
-    - apk add --no-cache curl bash
   script:
-    - echo "Checking ArgoCD application health and sync status..."
-    - |
-      if [ -z "$ARGOCD_SERVER" ] || [ -z "$ARGOCD_APP" ] || [ -z "$ARGOCD_TOKEN" ]; then
-        echo "ERROR: ARGOCD_SERVER, ARGOCD_APP, and ARGOCD_TOKEN must be configured"
-        exit 1
-      fi
-    - echo "Checking status of application: $ARGOCD_APP"
-    - |
-      # In real scenario, would query ArgoCD API for app status
-      echo "Application health status would be checked"
-      echo "Expected: application in 'Synced' and 'Healthy' state"
-    - echo "Status check complete"
+    # Refactored: Call shared script instead of inline logic
+    - bash ./src/step-status.sh
+  env:
+    INPUT_ARGOCD_SERVER: $ARGOCD_SERVER
+    INPUT_ARGOCD_APP: $ARGOCD_APP
+    INPUT_ARGOCD_TOKEN: $ARGOCD_TOKEN
+    INPUT_LOG_FILE: $LOG_FILE
   rules:
     - if: '$SKIP_STATUS_CHECK == "true"'
       when: never
@@ -210,12 +174,11 @@ publish_logs:
   stage: logs
   image: alpine:latest
   script:
-    - echo "Collecting logs and artifacts..."
-    - echo "Deployment completed successfully" | tee -a $LOG_FILE
-    - |
-      if [ -f "$LOG_FILE" ]; then
-        echo "Log file size: $(wc -c < $LOG_FILE) bytes"
-      fi
+    # Refactored: Call shared script instead of inline logic
+    - bash ./src/main.sh
+  env:
+    INPUT_PROJECT_PATH: $PROJECT_PATH
+    INPUT_LOG_FILE: $LOG_FILE
   artifacts:
     paths:
       - $LOG_FILE

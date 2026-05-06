@@ -20,148 +20,72 @@ definitions:
         name: Checkout Repository
         image: alpine:latest
         script:
-          - echo "Repository ready at $BITBUCKET_BRANCH:$BITBUCKET_COMMIT"
-          - ls -la
+          # Refactored: Call shared script instead of inline logic
+          - bash ./src/step-checkout.sh
+        env:
+          INPUT_LOG_FILE: ${LOG_FILE:-pipery.jsonl}
 
     - step: &setup-step
         name: Setup ArgoCD Environment
         image: alpine:latest
         script:
-          - echo "Setting up ArgoCD deployment environment..."
-          - apk add --no-cache curl bash wget tar gzip git openssh-client
-          - echo "Installing ArgoCD CLI..."
-          - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          - chmod +x /usr/local/bin/argocd
-          - argocd version --client
-          - echo "ArgoCD environment ready"
+          # Refactored: Call shared script instead of inline logic
+          - bash ./src/setup-psh.sh
+        env:
+          INPUT_LOG_FILE: ${LOG_FILE:-pipery.jsonl}
 
     - step: &download-step
         name: Validate Configuration
         image: alpine:latest
         script:
-          - |
-            if [ "$SKIP_DOWNLOAD" = "true" ]; then
-              echo "Skipping validation (SKIP_DOWNLOAD=true)"
-              exit 0
-            fi
-          - echo "Validating ArgoCD configuration..."
-          - |
-            if [ -z "$ARGOCD_SERVER" ] || [ -z "$ARGOCD_APP_NAME" ]; then
-              echo "ERROR: ARGOCD_SERVER and ARGOCD_APP_NAME must be set"
-              exit 1
-            fi
-          - echo "Configuration validated"
+          # Refactored: Call shared script instead of inline logic
+          - bash ./src/step-pull.sh
+        env:
+          INPUT_IMAGE_NAME: ${ARGOCD_IMAGE_NAME}
+          INPUT_IMAGE_TAG: ${ARGOCD_IMAGE_TAG}
+          INPUT_REGISTRY: ghcr.io
+          INPUT_LOG_FILE: ${LOG_FILE:-pipery.jsonl}
 
     - step: &deploy-step-script
         name: Deploy via ArgoCD Sync
         image: alpine:latest
         script:
-          - |
-            if [ "$SKIP_DEPLOY" = "true" ]; then
-              echo "Skipping deployment (SKIP_DEPLOY=true)"
-              exit 0
-            fi
-          - echo "Deploying via ArgoCD..."
-          - apk add --no-cache curl
-          - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          - chmod +x /usr/local/bin/argocd
-          - |
-            if [ -z "$ARGOCD_SERVER" ] || [ -z "$ARGOCD_TOKEN" ] || [ -z "$ARGOCD_APP_NAME" ]; then
-              echo "ERROR: ARGOCD_SERVER, ARGOCD_TOKEN, and ARGOCD_APP_NAME required"
-              exit 1
-            fi
-          - echo "Logging into ArgoCD: $ARGOCD_SERVER"
-          - argocd login $ARGOCD_SERVER --insecure --username admin --password "$ARGOCD_TOKEN"
-          - |
-            if [ -n "$GIT_REPO_URL" ] && [ -n "$GIT_REVISION" ]; then
-              echo "Updating ArgoCD application to revision: $GIT_REVISION"
-              argocd app set $ARGOCD_APP_NAME \
-                --repo $GIT_REPO_URL \
-                --revision $GIT_REVISION \
-                --grpc-web || true
-            fi
-          - |
-            if [ -n "$ARGOCD_IMAGE_NAME" ] && [ -n "$ARGOCD_IMAGE_TAG" ]; then
-              echo "Setting image parameters..."
-              argocd app set $ARGOCD_APP_NAME \
-                -p image.repository=$ARGOCD_IMAGE_NAME \
-                -p image.tag=$ARGOCD_IMAGE_TAG \
-                --grpc-web || true
-            fi
-          - |
-            case "$DEPLOY_STRATEGY" in
-              progressive)
-                echo "Progressive deployment: setting canary parameters..."
-                argocd app set $ARGOCD_APP_NAME \
-                  -p canary.enabled=true \
-                  -p canary.weight=10 \
-                  --grpc-web || true
-                ;;
-              blue-green)
-                echo "Blue-green deployment: setting environment..."
-                argocd app set $ARGOCD_APP_NAME \
-                  -p blueGreen.enabled=true \
-                  --grpc-web || true
-                ;;
-              rolling)
-                echo "Rolling deployment: standard sync"
-                ;;
-            esac
-          - echo "Syncing ArgoCD application: $ARGOCD_APP_NAME"
-          - |
-            if [ "$ARGOCD_AUTO_SYNC" = "true" ]; then
-              echo "Auto-syncing application..."
-              argocd app sync $ARGOCD_APP_NAME \
-                --grpc-web \
-                --wait \
-                --timeout ${SYNC_TIMEOUT:-5m}
-            else
-              echo "Application sync policy is manual"
-            fi
-          - echo "ArgoCD deployment request complete"
+          # Refactored: Call shared script instead of inline logic
+          - bash ./src/step-update.sh && bash ./src/step-sync.sh
+        env:
+          INPUT_ARGOCD_SERVER: ${ARGOCD_SERVER}
+          INPUT_ARGOCD_APP: ${ARGOCD_APP_NAME}
+          INPUT_ARGOCD_TOKEN: ${ARGOCD_TOKEN}
+          INPUT_IMAGE_NAME: ${ARGOCD_IMAGE_NAME}
+          INPUT_IMAGE_TAG: ${ARGOCD_IMAGE_TAG}
+          INPUT_SYNC_TIMEOUT: ${SYNC_TIMEOUT:-5m}
+          INPUT_PRUNE: "false"
+          INPUT_FORCE: "false"
+          INPUT_LOG_FILE: ${LOG_FILE:-pipery.jsonl}
 
     - step: &status-check-step
         name: Status Check & Health Verification
         image: alpine:latest
         script:
-          - |
-            if [ "$SKIP_STATUS_CHECK" = "true" ]; then
-              echo "Skipping status check (SKIP_STATUS_CHECK=true)"
-              exit 0
-            fi
-          - echo "Checking ArgoCD application status..."
-          - apk add --no-cache curl
-          - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          - chmod +x /usr/local/bin/argocd
-          - argocd login $ARGOCD_SERVER --insecure --username admin --password "$ARGOCD_TOKEN"
-          - |
-            APP_STATUS=$(argocd app get $ARGOCD_APP_NAME --grpc-web -o json 2>/dev/null || echo '{}')
-            echo "Application Status:"
-            echo "$APP_STATUS" | grep -o '"syncStatus":"[^"]*"' || echo "Syncing or evaluating..."
-            echo "$APP_STATUS" | grep -o '"health":"[^"]*"' || echo "Health status: checking..."
-          - |
-            echo "Detailed application status:"
-            argocd app get $ARGOCD_APP_NAME --grpc-web || echo "Status check completed"
-          - echo "Health verification complete"
+          # Refactored: Call shared script instead of inline logic
+          - bash ./src/step-status.sh
+        env:
+          INPUT_ARGOCD_SERVER: ${ARGOCD_SERVER}
+          INPUT_ARGOCD_APP: ${ARGOCD_APP_NAME}
+          INPUT_ARGOCD_TOKEN: ${ARGOCD_TOKEN}
+          INPUT_LOG_FILE: ${LOG_FILE:-pipery.jsonl}
 
     - step: &logs-step
         name: Collect & Archive Logs
         image: alpine:latest
         script:
-          - echo "Archiving deployment logs..."
-          - mkdir -p logs
-          - |
-            {
-              echo "ArgoCD Deployment Report"
-              echo "========================"
-              echo "Application: $ARGOCD_APP_NAME"
-              echo "Server: $ARGOCD_SERVER"
-              echo "Strategy: $DEPLOY_STRATEGY"
-              echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              echo "Status: SUCCESS"
-            } > logs/deployment_report.txt
+          # Refactored: Call shared script instead of inline logic
+          - bash ./src/main.sh
+        env:
+          INPUT_PROJECT_PATH: ${PROJECT_PATH:-.}
+          INPUT_LOG_FILE: ${LOG_FILE:-pipery.jsonl}
         artifacts:
-          - logs/**
+          - ${LOG_FILE:-pipery.jsonl}
 
 variables:
   PROJECT_PATH: "."
