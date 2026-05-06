@@ -72,6 +72,38 @@ include:
 
 No outputs.
 
+## Bitbucket Pipelines
+
+Bitbucket Cloud pipelines support this deployment workflow. The equivalent configuration is in `bitbucket-pipelines.yml`.
+
+### Quick Start
+
+1. Copy `bitbucket-pipelines.yml` to your Bitbucket repository root
+2. Configure ArgoCD credentials in Repository Variables:
+   - `ARGOCD_TOKEN` - ArgoCD authentication token
+   - `ARGOCD_SERVER` - ArgoCD server URL (e.g., argocd.example.com)
+   - `GITHUB_TOKEN` - GitHub API token (for Git operations)
+3. Configure application name and image details
+4. Commit to trigger deployment
+
+### Pipeline Stages
+
+- checkout → setup → update → sync → status_check → logs
+
+### Features
+
+- ArgoCD image tag updates
+- Automatic sync with rollout waiting
+- Prune and force sync options
+- Rollout status checking
+- Health verification
+- 90-day log retention
+
+### Documentation
+
+- See `bitbucket-pipelines.yml` for complete customization options
+- Refer to [Bitbucket Pipelines Documentation](https://support.atlassian.com/bitbucket-cloud/docs/get-started-with-bitbucket-pipelines/) for detailed reference
+
 ## Development
 
 This repository is managed with `pipery-tooling`.
