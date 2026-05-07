@@ -17,6 +17,7 @@ variables:
   # ArgoCD configuration
   ARGOCD_SERVER: ""
   ARGOCD_APP: ""
+  ARGOCD_TOKEN: ""
   IMAGE_NAME: ""
   IMAGE_TAG: "$CI_COMMIT_SHA"
   # Sync options
@@ -27,8 +28,6 @@ variables:
   SKIP_UPDATE: "false"
   SKIP_SYNC: "false"
   SKIP_STATUS_CHECK: "false"
-  # Secrets (set in GitLab Protected Variables)
-  # ARGOCD_TOKEN: (set in GitLab Protected Variables)
   # Logging
   LOG_FILE: "pipery.jsonl"
 
