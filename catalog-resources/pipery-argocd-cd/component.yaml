@@ -1,0 +1,213 @@
+spec:
+  inputs:
+    inputs:
+    - name: PROJECT_PATH
+      default: .
+      description: Path to the project source tree
+    - name: IMAGE_NAME
+      default: ''
+      description: Image Name
+    - name: IMAGE_TAG
+      default: $CI_COMMIT_SHA
+      description: Image Tag
+    - name: ARGOCD_SERVER
+      description: Argocd Server
+    - name: ARGOCD_APP
+      description: Argocd App
+    - name: ARGOCD_TOKEN
+      description: Argocd Token
+  outputs:
+  - name: LOG_FILE
+    description: Pipery JSONL log file with pipeline events
+    default: pipery.jsonl
+variables:
+  PROJECT_PATH: .
+  CONFIG_FILE: .pipery/config.yaml
+  ARGOCD_SERVER: ''
+  ARGOCD_APP: ''
+  ARGOCD_TOKEN: ''
+  IMAGE_NAME: ''
+  IMAGE_TAG: $CI_COMMIT_SHA
+  SYNC_TIMEOUT: '300'
+  PRUNE: 'false'
+  FORCE: 'false'
+  SKIP_UPDATE: 'false'
+  SKIP_SYNC: 'false'
+  SKIP_STATUS_CHECK: 'false'
+  LOG_FILE: pipery.jsonl
+stages:
+- checkout
+- setup
+- download
+- update
+- sync
+- status_check
+- logs
+checkout:
+  stage: checkout
+  image: alpine:latest
+  script:
+  - bash ./src/step-checkout.sh
+  env:
+    INPUT_LOG_FILE: $LOG_FILE
+  artifacts:
+    paths:
+    - .git/
+    expire_in: 1 day
+setup:
+  stage: setup
+  image: alpine:latest
+  script:
+  - bash ./src/setup-psh.sh
+  env:
+    INPUT_LOG_FILE: $LOG_FILE
+  artifacts:
+    paths:
+    - .git/
+    expire_in: 1 day
+download_images:
+  stage: download
+  image: alpine:latest
+  script:
+  - bash ./src/step-pull.sh
+  env:
+    INPUT_IMAGE_NAME: $IMAGE_NAME
+    INPUT_IMAGE_TAG: $IMAGE_TAG
+    INPUT_LOG_FILE: $LOG_FILE
+  allow_failure: true
+  rules:
+  - when: on_success
+update_argocd_image:
+  stage: update
+  image: alpine:latest
+  script:
+  - bash ./src/step-update.sh
+  env:
+    INPUT_ARGOCD_SERVER: $ARGOCD_SERVER
+    INPUT_ARGOCD_APP: $ARGOCD_APP
+    INPUT_ARGOCD_TOKEN: $ARGOCD_TOKEN
+    INPUT_IMAGE_NAME: $IMAGE_NAME
+    INPUT_IMAGE_TAG: $IMAGE_TAG
+    INPUT_LOG_FILE: $LOG_FILE
+  rules:
+  - if: $SKIP_UPDATE == "true"
+    when: never
+  - when: on_success
+  allow_failure: true
+sync_argocd:
+  stage: sync
+  image: alpine:latest
+  dependencies:
+  - update_argocd_image
+  script:
+  - bash ./src/step-sync.sh
+  env:
+    INPUT_ARGOCD_SERVER: $ARGOCD_SERVER
+    INPUT_ARGOCD_APP: $ARGOCD_APP
+    INPUT_ARGOCD_TOKEN: $ARGOCD_TOKEN
+    INPUT_SYNC_TIMEOUT: $SYNC_TIMEOUT
+    INPUT_PRUNE: $PRUNE
+    INPUT_FORCE: $FORCE
+    INPUT_LOG_FILE: $LOG_FILE
+  rules:
+  - if: $SKIP_SYNC == "true"
+    when: never
+  - when: on_success
+  artifacts:
+    paths:
+    - $LOG_FILE
+    expire_in: 30 days
+  allow_failure: true
+status_check:
+  stage: status_check
+  image: alpine:latest
+  dependencies:
+  - sync_argocd
+  script:
+  - bash ./src/step-status.sh
+  env:
+    INPUT_ARGOCD_SERVER: $ARGOCD_SERVER
+    INPUT_ARGOCD_APP: $ARGOCD_APP
+    INPUT_ARGOCD_TOKEN: $ARGOCD_TOKEN
+    INPUT_LOG_FILE: $LOG_FILE
+  rules:
+  - if: $SKIP_STATUS_CHECK == "true"
+    when: never
+  - when: on_success
+  allow_failure: false
+publish_logs:
+  stage: logs
+  image: alpine:latest
+  script:
+  - bash ./src/main.sh
+  env:
+    INPUT_PROJECT_PATH: $PROJECT_PATH
+    INPUT_LOG_FILE: $LOG_FILE
+  artifacts:
+    paths:
+    - $LOG_FILE
+    expire_in: 90 days
+  when: always
+dashboard_link:
+  stage: logs
+  image: alpine:latest
+  needs:
+  - publish_logs
+  script:
+  - echo "Generating Pipery Dashboard link..."
+  - '# Get the artifact URL from GitLab API
+
+    ARTIFACT_URL="${CI_SERVER_URL}/api/v4/projects/${CI_PROJECT_ID}/jobs/${CI_JOB_ID}/artifacts"
+
+    echo "Artifact URL: $ARTIFACT_URL"
+
+
+    # URL encode the artifact path
+
+    ENCODED_URL=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=''''))"
+    "$ARTIFACT_URL")
+
+
+    # Create dashboard link
+
+    DASHBOARD_URL="https://dash.pipery.dev/?artifact=${ENCODED_URL}"
+
+
+    # Output the link in markdown format
+
+    echo ""
+
+    echo "=========================================="
+
+    echo "Pipery Dashboard Link"
+
+    echo "=========================================="
+
+    echo "[$DASHBOARD_URL]($DASHBOARD_URL)"
+
+    echo ""
+
+    echo "Direct URL:"
+
+    echo "$DASHBOARD_URL"
+
+    echo "=========================================="
+
+    echo ""
+
+
+    # Save to artifact file for persistence
+
+    mkdir -p artifacts
+
+    echo "DASHBOARD_URL=$DASHBOARD_URL" > artifacts/dashboard_link.env
+
+    '
+  artifacts:
+    paths:
+    - artifacts/
+    reports:
+      dotenv: artifacts/dashboard_link.env
+    expire_in: 90 days
+  allow_failure: true
+  when: always
